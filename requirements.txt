@@ -1,7 +1,5 @@
-streamlit
+streamlit>=1.32
+scikit-learn==1.6.1
+joblib
 numpy
 pandas
-scikit-learn
-joblib
-matplotlib
-koreanize-matplotlib
