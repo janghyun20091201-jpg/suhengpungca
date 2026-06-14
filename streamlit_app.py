@@ -12,7 +12,7 @@ MIX — Concrete Strength Studio
 
 from pathlib import Path
 
-import joblib
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -28,18 +28,43 @@ st.set_page_config(
 
 # 학습 시 X 컬럼 순서 — 절대 바꾸지 말 것 (모델 feature_names_in_ 과 일치해야 함)
 FEATURES = ["시멘트량", "고성능 감수제량", "재령 기간", "물양"]
-MODEL_PATH = Path(__file__).resolve().parent / "concrete_strength_new_model.pkl"
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "concrete_strength_new_model.pkl"
+DATA_PATH = BASE_DIR / "model_data.npz"
 
 
 @st.cache_resource(show_spinner=False)
-def load_model():
-    return joblib.load(MODEL_PATH)
+def get_model():
+    """원본 .pkl을 먼저 시도하고, 환경(파이썬·scikit-learn 버전) 때문에 못 불러오면
+    동봉한 distilled 데이터(model_data.npz)로 동일한 모델을 즉석 재학습한다.
+    → 어떤 배포 환경에서도 절대 죽지 않게 만드는 안전장치."""
+    # 1) 원본 모델 그대로 사용 (scikit-learn 버전이 맞는 환경에서)
+    try:
+        import joblib
+
+        m = joblib.load(MODEL_PATH)
+        m.predict(pd.DataFrame([[300, 5, 28, 180]], columns=FEATURES))  # 동작 확인
+        return m, "원본 모델 (concrete_strength_new_model.pkl)"
+    except Exception:
+        pass
+
+    # 2) 폴백 — 원본 모델의 예측을 학습한 distilled 데이터로 재학습 (버전 무관)
+    from sklearn.ensemble import GradientBoostingRegressor
+
+    arr = np.load(DATA_PATH)["data"].astype(float)
+    X = pd.DataFrame(arr[:, :4], columns=FEATURES)
+    y = arr[:, 4]
+    m = GradientBoostingRegressor(
+        n_estimators=500, max_depth=4, learning_rate=0.05,
+        subsample=0.9, random_state=0,
+    ).fit(X, y)
+    return m, "호환 재학습 모델 (Gradient Boosting)"
 
 
 try:
-    model = load_model()
+    model, MODEL_SOURCE = get_model()
 except Exception as exc:  # noqa: BLE001
-    st.error(f"모델을 불러오지 못했습니다 — `{MODEL_PATH.name}` 파일을 확인하세요.\n\n{exc}")
+    st.error(f"모델을 준비하지 못했습니다.\n\n{exc}")
     st.stop()
 
 
@@ -104,14 +129,6 @@ header[data-testid="stHeader"], [data-testid="stToolbar"], #MainMenu, footer{dis
   display:flex;align-items:center;gap:14px;}
 .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
   box-shadow:0 0 0 5px var(--accent-soft);margin-left:-2px;}
-.nav-r{display:flex;align-items:center;gap:20px;font-weight:500;font-size:14.5px;color:#3a3a3c;}
-.nav-r .talk{display:inline-flex;align-items:center;gap:6px;border-bottom:1.5px solid var(--ink);
-  padding-bottom:2px;}
-.nav-r .talk .ar{color:var(--accent);font-weight:700;}
-.nav-r .bar{width:1px;height:17px;background:var(--line);}
-.nav-r .menu{display:flex;flex-direction:column;gap:5px;}
-.nav-r .menu span{width:26px;height:1.5px;background:var(--ink);display:block;}
-.nav-r .menu span:last-child{width:18px;margin-left:auto;}
 
 /* ---------- hero ---------- */
 .hero{position:relative;z-index:2;min-height:min(86vh,820px);
@@ -133,17 +150,19 @@ header[data-testid="stHeader"], [data-testid="stToolbar"], #MainMenu, footer{dis
 .h-sub{max-width:540px;margin-top:26px;color:#6b6a66;font-weight:400;font-size:clamp(15px,1.3vw,18px);
   line-height:1.62;animation:rise 1s .32s both;}
 .cta{margin-top:34px;display:inline-flex;align-items:center;gap:12px;
-  background:var(--ink);color:#fff;border-radius:40px;padding:17px 30px;
+  background:var(--ink);border-radius:40px;padding:17px 30px;
   font-weight:600;font-size:15.5px;letter-spacing:.02em;cursor:pointer;
   box-shadow:0 18px 38px -18px rgba(0,0,0,.55);transition:transform .35s,box-shadow .35s;
-  animation:rise 1s .42s both;text-decoration:none;}
+  animation:rise 1s .42s both;}
+.cta, .cta:link, .cta:visited, .cta:hover, .cta:active{
+  color:#fff!important;text-decoration:none!important;}
 .cta:hover{transform:translateY(-3px);box-shadow:0 26px 46px -18px rgba(0,0,0,.6);}
-.cta .ar{color:var(--accent);font-weight:700;}
+.cta .ar{color:var(--accent)!important;font-weight:700;}
 
 .hero-right{align-self:end;display:flex;flex-direction:column;gap:22px;
   animation:rise 1s .5s both;}
-.hr-copy{font-size:clamp(15px,1.25vw,18px);line-height:1.6;color:var(--muted-2);font-weight:400;}
-.hr-copy b{color:var(--ink);font-weight:600;}
+.hr-copy{font-size:clamp(15px,1.25vw,18px);line-height:1.62;color:#4a4945;font-weight:500;}
+.hr-copy b{color:var(--ink);font-weight:700;}
 .tags{display:flex;flex-wrap:wrap;gap:9px;}
 .tag{border:1px solid var(--line);border-radius:30px;padding:9px 17px;font-size:13px;
   font-weight:500;color:#3a3a3c;background:rgba(255,255,255,.4);backdrop-filter:blur(6px);
@@ -291,11 +310,6 @@ ORB_SVG = """
 HERO = """
 <div class="topbar">
   <div class="brand">M<span class="dot"></span>X</div>
-  <div class="nav-r">
-    <span class="talk">예측 시작 <span class="ar">&#8599;</span></span>
-    <span class="bar"></span>
-    <span class="menu"><span></span><span></span></span>
-  </div>
 </div>
 
 <section class="hero">
@@ -426,12 +440,12 @@ with right:
 #  FOOTER
 # ────────────────────────────────────────────────────────────────────────────
 st.markdown(
-    """
+    f"""
 <div class="foot">
   <div>
     <b>MIX — Concrete Strength Studio</b><br>
     Model · Gradient Boosting Regressor &nbsp;|&nbsp; Test R² ≈ 0.82<br>
-    Features · 시멘트량 · 고성능 감수제량 · 재령 기간 · 물양
+    Active · {MODEL_SOURCE}
   </div>
   <div class="r">
     Data · Kaggle Concrete Compressive Strength<br>
