@@ -190,24 +190,28 @@ header[data-testid="stHeader"], [data-testid="stToolbar"], #MainMenu, footer{dis
 .panel-h .s{color:var(--muted);font-size:13px;font-weight:400;margin-left:auto;}
 
 /* input row label */
-.ic{display:flex;align-items:flex-end;justify-content:space-between;margin:18px 0 2px;}
-.ic-l{display:flex;flex-direction:column;gap:1px;}
+.ic{display:flex;align-items:flex-end;justify-content:space-between;margin:20px 0 6px;}
+.ic-l{display:flex;flex-direction:column;gap:2px;}
 .ic-kr{font-family:'Paperlogy';font-weight:600;font-size:16px;letter-spacing:-.02em;}
 .ic-en{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:500;}
-.ic-v{font-family:'SeoulAlrim';font-weight:700;font-size:30px;line-height:1;color:var(--ink);
-  display:flex;align-items:baseline;gap:5px;}
-.ic-v .u{font-family:'Paperlogy';font-weight:500;font-size:12.5px;color:var(--muted);letter-spacing:0;}
+.ic-rng{font-family:'Paperlogy';font-size:11.5px;color:var(--muted-2);font-weight:500;letter-spacing:.02em;}
 
-/* ---------- sliders ---------- */
-[data-testid="stSlider"]{padding-top:2px;}
-[data-testid="stSlider"] [data-baseweb="slider"] [role="slider"]{
-  background:#fff!important;border:2px solid var(--accent)!important;
-  box-shadow:0 4px 12px -2px rgba(255,91,35,.5)!important;height:20px!important;width:20px!important;}
-[data-testid="stSlider"] [data-baseweb="slider"] > div > div{height:5px!important;}
-/* 큰 커스텀 값 표시와 중복되는 네이티브 thumb 값 말풍선은 숨김 */
-[data-testid="stSliderThumbValue"]{display:none!important;}
-[data-testid="stTickBarMin"], [data-testid="stTickBarMax"], [data-testid="stTickBar"]{
-  font-family:'Paperlogy'!important;color:var(--muted-2)!important;font-size:11px!important;font-weight:500!important;}
+/* ---------- number inputs (키보드 입력 가능) ---------- */
+[data-testid="stNumberInput"]{margin:0 0 4px;}
+[data-testid="stNumberInput"] [data-baseweb="input"]{
+  background:rgba(255,255,255,.6)!important;border:1.5px solid rgba(11,11,12,.1)!important;
+  border-radius:15px!important;overflow:hidden;transition:border-color .2s,box-shadow .2s;}
+[data-testid="stNumberInput"] [data-baseweb="input"]:focus-within{
+  border-color:var(--accent)!important;box-shadow:0 0 0 4px var(--accent-soft)!important;}
+[data-testid="stNumberInput"] input{
+  font-family:'SeoulAlrim'!important;font-weight:700!important;font-size:25px!important;
+  color:var(--ink)!important;background:transparent!important;padding:9px 14px!important;
+  -webkit-text-fill-color:var(--ink)!important;}
+[data-testid="stNumberInput"] button{
+  background:transparent!important;border:none!important;color:var(--muted)!important;
+  border-left:1px solid rgba(11,11,12,.07)!important;transition:color .2s;}
+[data-testid="stNumberInput"] button:hover{color:var(--accent)!important;background:var(--accent-soft)!important;}
+[data-testid="stNumberInput"] button svg{fill:currentColor!important;}
 
 /* ---------- result card ---------- */
 .res-lab{font-size:12.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);font-weight:600;}
@@ -352,7 +356,7 @@ st.markdown(
     <div class="sec-k">The Mix Studio</div>
     <h2 class="sec-t">배합비를 조절해 <em>강도를 예측</em>하세요.</h2>
   </div>
-  <p class="sec-d">슬라이더를 움직이면 결과가 즉시 갱신됩니다. 모든 값은 Kaggle
+  <p class="sec-d">값을 직접 입력(또는 +/− 버튼)하면 결과가 즉시 갱신됩니다. 모든 값은 Kaggle
   콘크리트 압축강도 데이터셋의 실제 분포 범위 안에서 조정됩니다.</p>
 </div>
 """,
@@ -362,17 +366,20 @@ st.markdown(
 left, right = st.columns([1.12, 0.88], gap="large")
 
 
-def input_row(idx, kr, en, unit, lo, hi, default, step, fmt="{:g}", key=None):
-    """라벨/현재값(상단) + 네이티브 슬라이더(하단)."""
-    ph = st.empty()
-    val = st.slider(kr, lo, hi, default, step, key=key, label_visibility="collapsed")
-    ph.markdown(
+def input_row(idx, kr, en, unit, lo, hi, default, step, fmt="%.0f", key=None):
+    """라벨(상단) + 키보드로 직접 입력 가능한 숫자 입력칸(하단)."""
+    rng = f"{fmt % lo}–{fmt % hi} {unit}"
+    st.markdown(
         f"""<div class="ic">
               <div class="ic-l"><span class="ic-kr">{idx} · {kr}</span>
-              <span class="ic-en">{en}</span></div>
-              <div class="ic-v">{fmt.format(val)}<span class="u">{unit}</span></div>
+              <span class="ic-en">{en} · {unit}</span></div>
+              <div class="ic-rng">{rng}</div>
             </div>""",
         unsafe_allow_html=True,
+    )
+    val = st.number_input(
+        kr, min_value=lo, max_value=hi, value=default, step=step,
+        format=fmt, key=key, label_visibility="collapsed",
     )
     return val
 
@@ -384,10 +391,10 @@ with left:
         <span class="s">Mix proportions</span></div>""",
         unsafe_allow_html=True,
     )
-    cement = input_row("01", "시멘트량", "Cement", "kg/m³", 100.0, 600.0, 281.0, 1.0, key="c")
-    superp = input_row("02", "고성능 감수제량", "Superplasticizer", "kg/m³", 0.0, 35.0, 6.0, 0.1, fmt="{:.1f}", key="s")
-    age = input_row("03", "재령 기간", "Age", "days", 1, 200, 28, 1, key="a")
-    water = input_row("04", "물양", "Water", "kg/m³", 120.0, 250.0, 182.0, 0.5, fmt="{:.1f}", key="w")
+    cement = input_row("01", "시멘트량", "Cement", "kg/m³", 100.0, 600.0, 281.0, 1.0, fmt="%.0f", key="c")
+    superp = input_row("02", "고성능 감수제량", "Superplasticizer", "kg/m³", 0.0, 35.0, 6.0, 0.1, fmt="%.1f", key="s")
+    age = input_row("03", "재령 기간", "Age", "days", 1, 200, 28, 1, fmt="%d", key="a")
+    water = input_row("04", "물양", "Water", "kg/m³", 120.0, 250.0, 182.0, 0.5, fmt="%.1f", key="w")
 
 
 # ── 예측 (학습 시 컬럼 순서 그대로) ──
